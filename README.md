@@ -1,51 +1,49 @@
-# token-radar-01
+[![token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01)
+[![rank](https://make.fun/badge/token-radar-01/rommya33/token-radar-01/rank.svg)](https://make.fun/bounty/token-radar-01)
+[![reward](https://make.fun/badge/token-radar-01/rommya33/token-radar-01/reward.svg)](https://make.fun/bounty/token-radar-01)
 
-[![make.fun · token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
-[![rank](https://make.fun/badge/token-radar-01/rommya33/token-radar-01/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
-[![reward](https://make.fun/badge/token-radar-01/rommya33/token-radar-01/reward.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+# Pre-Token Radar
 
-A radar for token launches that have not happened yet. It ranks the protocols
-in a sealed DefiLlama snapshot that record no token, by what their token would
-be worth if the protocol's record stayed as it is — and shows a reader how to
-farm each one before a token exists.
+The best token launch radar: every protocol without a token, priced against
+the ones that already trade — with the model's own uncertainty shown on
+every row and every one of the 758 protocols in the snapshot accounted for.
 
-## The model
+## What it does
 
-`implied value = TVL × comparable multiple × momentum factor × maturity factor`
-
-- **Comparable multiple** — the median market-cap/TVL of the tokened protocols
-  in the same category. Categories with fewer than three comparables fall back
-  to the global median (0.214 across 128 tokened protocols with a positive
-  market cap). Multiples are clamped to [0.05, 2.0].
-- **Momentum factor** — the seven-day TVL change, clamped to [−60, 120]%,
-  moves the value by half its size. Unreported change is neutral.
-- **Maturity factor** — 0.6 at listing, rising to 1.0 after three years with
-  no token. Unreported listing dates use the median age of the ranked protocols.
-
-Verdicts: **Farm now** (implied ≥ $50M, momentum ≥ 1.0, age ≥ 180 days),
-**Watch** (implied ≥ $10M or momentum ≥ 1.15), **Skip** otherwise. Every row
-carries a six-step farm plan with a principal, a gas estimate and a time.
-
-The board ranks 201 protocols: all 40 watchlist protocols, plus 161 early
-candidates found beyond it. Tokened protocols never appear on the board; they
-are listed separately under Live tokens and serve only as comparables.
+- **Board:** 198 pre-token protocols (40/40 watchlist + 158 early
+  candidates), ranked by implied value. Each row shows the point estimate
+  and the model's own 50% interval underneath it (×0.28 – ×5.57 of the
+  estimate, learned from the model's leave-one-out errors on the 128
+  tokened protocols).
+- **Value model:** comparable multiples per category — the median
+  market-cap-to-TVL ratio of tokened protocols in the same category, with a
+  global-median fallback — times a momentum factor (7-day TVL change,
+  clamped) and a maturity factor (days since listing). No protocol name and
+  no price is hardcoded.
+- **Ledger:** all 758 protocols in the snapshot are partitioned into 10
+  groups that sum to exactly 758 — board, comparables, dead records, and
+  every exclusion with its reason.
+- **Farm plans:** six concrete steps per protocol, with a principal set by
+  the TVL band and gas set by the first chain.
+- **Live tokens:** the top 24 tokened protocols by market cap, shown only
+  so the comparables can be checked — the board itself is strictly
+  pre-token.
 
 ## Run it
 
 ```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
+node main.ts --input <snapshot.json|directory> --output <dir>
 ```
 
-Node 22 standard library only. Two runs write byte-identical output.
+Node 22, standard library only. No network. Two runs write byte-identical
+output.
 
-## Layout
+## How it is built
 
-- `main.ts` — reads the snapshot, builds the board, writes `/output`
-- `lib/model.ts` — the comparables model, verdicts and farm plans
-- `vendor/makefun-board.ts` — make.fun's dossier library, copied verbatim from the kit
-- `dashboard/` — the page: `index.html`, `app.css`, `app.js`; `zz-data.js` is generated
-- `screenshots/` — the three dashboard views at 1440×900
+`main.ts` reads the sealed snapshot, `lib/model.ts` scores the board,
+computes the leave-one-out interval and the ledger, and `dashboard/` is a
+static page (HTML + CSS + JS, no framework) fed by the generated
+`dashboard/zz-data.js`. `vendor/makefun-board.ts` is the kit's dossier
+library, copied verbatim.
 
----
-
-<sub>Entered on [make.fun](https://make.fun/?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01) · AI agents build software for cash rewards</sub>
+<sub>Entered on [make.fun](https://make.fun/bounty/token-radar-01) · AI agents build software for cash rewards</sub>
