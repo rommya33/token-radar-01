@@ -1,294 +1,233 @@
-/* Token Radar — the dashboard's behaviour. No network, no fetch: every
-   figure comes from window.RADAR, the dataset main.ts generated from the
-   sealed snapshot. */
+// Pre-Token Radar — the dashboard. No framework, no network: everything
+// renders from window.RADAR, the data file this program's main.ts writes.
+(function () {
+  'use strict';
+  var D = window.RADAR;
+  var meta = D.meta;
+  var rows = D.rows;
 
-const R = window.RADAR;
-const rows = R.rows;
-const bySlug = new Map(rows.map((r) => [r.slug, r]));
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function money(v) {
+    if (v >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+    return '$' + Math.round(v);
+  }
+  function pct(change) {
+    if (change === null || change === undefined) return '—';
+    return (change >= 0 ? '+' : '') + change.toFixed(1) + '%';
+  }
+  function badge(v) {
+    var cls = v === 'Farm now' ? 'farm' : v === 'Watch' ? 'watch' : 'skip';
+    return '<span class="badge ' + cls + '">' + esc(v) + '</span>';
+  }
+  function $(id) { return document.getElementById(id); }
 
-const state = {
-  sort: 'implied_value_usd',
-  dir: -1,
-  q: '',
-  category: '',
-  chain: '',
-  band: '',
-  watchlistOnly: false,
-};
+  // ---- integrity strip: the ledger bar + legend, top of the board ----
+  var LEDGER_COLORS = ['#0E7C5A', '#2E7D9E', '#B45309', '#7C6AAE', '#8A6D3B', '#A33B2E', '#5B7C4A', '#4A6FA5', '#9AA0A6', '#C9A227', '#D8D0C4'];
+  var LEDGER_LABELS = {
+    board_rankable: 'On the board',
+    tokened_comparables_mcap_positive: 'Tokened comparables',
+    tokened_mcap_zero: 'Tokened, mcap 0',
+    tokened_mcap_negative_sentinel: 'Tokened, mcap −1',
+    not_strictly_pretoken_symbol_or_gecko: 'Sub-protocol of a tokened parent',
+    excluded_version_suffix: 'Version suffix',
+    excluded_category: 'Excluded category',
+    excluded_wrapped_word: 'Wrapped / staked word',
+    excluded_exchange_prefix: 'Exchange name',
+    excluded_tvl_floor: 'Below TVL floor',
+    unexplained_not_on_board: 'Unexplained',
+  };
+  function renderLedger() {
+    var bar = $('ledger-bar');
+    var legend = $('ledger-legend');
+    bar.innerHTML = '';
+    legend.innerHTML = '';
+    D.ledger.forEach(function (g, i) {
+      if (g.count <= 0) return;
+      var seg = document.createElement('div');
+      seg.style.width = (g.count / meta.totalProtocols * 100).toFixed(2) + '%';
+      seg.style.background = LEDGER_COLORS[i % LEDGER_COLORS.length];
+      seg.title = (LEDGER_LABELS[g.group] || g.group) + ': ' + g.count;
+      bar.appendChild(seg);
+      var item = document.createElement('span');
+      item.innerHTML =
+        '<span class="swatch" style="background:' + LEDGER_COLORS[i % LEDGER_COLORS.length] + '"></span>' +
+        esc(LEDGER_LABELS[g.group] || g.group) + ' <b>' + g.count + '</b>';
+      legend.appendChild(item);
+    });
+    var table = $('ledger-table');
+    table.innerHTML = D.ledger.map(function (g) {
+      return '<tr><td>' + esc(LEDGER_LABELS[g.group] || g.group) + '</td><td class="num">' + g.count + '</td><td>' + esc(g.definition) + '</td></tr>';
+    }).join('');
+    $('ledger-total').textContent = String(meta.totalProtocols);
+    $('m-interval').textContent = '×' + meta.p25.toFixed(2) + ' – ×' + meta.p75.toFixed(2);
+  }
 
-/* ---- formatting (en-US, fixed everywhere) ---- */
-
-function fmtCompact(v) {
-  if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
-  if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
-  return '$' + v.toLocaleString('en-US');
-}
-
-function fmtFull(v) {
-  return '$' + v.toLocaleString('en-US');
-}
-
-function fmtChange(c) {
-  if (c === null) return '<span class="muted">—</span>';
-  if (c > 0) return '<span class="up">+' + c.toFixed(1) + '%</span>';
-  if (c < 0) return '<span class="down">' + c.toFixed(1) + '%</span>';
-  return '<span class="muted">0.0%</span>';
-}
-
-function esc(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-const VERDICT_ORDER = { 'Farm now': 0, Watch: 1, Skip: 2 };
-const VERDICT_CLASS = { 'Farm now': 'verdict-farm', Watch: 'verdict-watch', Skip: 'verdict-skip' };
-
-function verdictBadge(v) {
-  return '<span class="verdict ' + VERDICT_CLASS[v] + '">' + esc(v) + '</span>';
-}
-
-/* ---- the board ---- */
-
-function filteredRows() {
-  const q = state.q.trim().toLowerCase();
-  return rows.filter((r) => {
-    if (state.watchlistOnly && !r.watchlist) return false;
-    if (state.category && r.category !== state.category) return false;
-    if (state.chain && !r.chains.includes(state.chain)) return false;
-    if (state.band === 'farm' && r.implied_value_usd < 50000000) return false;
-    if (state.band === 'watch' && (r.implied_value_usd < 10000000 || r.implied_value_usd >= 50000000)) return false;
-    if (state.band === 'low' && r.implied_value_usd >= 10000000) return false;
-    if (q && r.name.toLowerCase().indexOf(q) === -1 && r.slug.toLowerCase().indexOf(q) === -1) return false;
-    return true;
-  });
-}
-
-function sortedRows(list) {
-  const key = state.sort;
-  const dir = state.dir;
-  return list.slice().sort((a, b) => {
-    let av = a[key];
-    let bv = b[key];
-    if (key === 'verdict') {
-      av = VERDICT_ORDER[a.verdict];
-      bv = VERDICT_ORDER[b.verdict];
-    }
-    if (key === 'name') {
-      return dir * (av < bv ? -1 : av > bv ? 1 : 0);
-    }
-    if (av === null && bv === null) return 0;
-    if (av === null) return 1;
-    if (bv === null) return -1;
-    if (av !== bv) return dir * (av < bv ? -1 : 1);
-    return a.slug < b.slug ? -1 : 1;
-  });
-}
-
-function renderBoard() {
-  const list = sortedRows(filteredRows());
-  const body = document.getElementById('board-body');
-  body.innerHTML = list
-    .map((r) => {
-      const age = r.age_days + 'd' + (r.age_estimated ? ' *' : '');
-      const badge = r.watchlist ? '<span class="watch-badge">watchlist</span>' : '';
-      return (
-        '<tr>' +
+  // ---- board: filters + sorting ----
+  var sortKey = 'implied';
+  var sortDir = -1;
+  var SORTS = {
+    rank: function (a, b) { return a.rank - b.rank; },
+    name: function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; },
+    implied: function (a, b) { return a.implied - b.implied; },
+    tvl: function (a, b) { return a.tvl - b.tvl; },
+    change: function (a, b) { return (a.change === null ? -1e9 : a.change) - (b.change === null ? -1e9 : b.change); },
+    age: function (a, b) { return a.age - b.age; },
+    verdict: function (a, b) {
+      var order = { 'Farm now': 0, Watch: 1, Skip: 2 };
+      return order[a.verdict] - order[b.verdict];
+    },
+  };
+  function filteredRows() {
+    var q = ($('f-search').value || '').trim().toLowerCase();
+    var cat = $('f-category').value;
+    var chain = $('f-chain').value;
+    var verdict = $('f-verdict').value;
+    var watchOnly = $('f-watchlist').checked;
+    var out = rows.filter(function (r) {
+      if (watchOnly && !r.watch) return false;
+      if (cat && r.category !== cat) return false;
+      if (chain && r.chains.indexOf(chain) === -1) return false;
+      if (verdict && r.verdict !== verdict) return false;
+      if (q && (r.name + ' ' + r.slug + ' ' + (r.category || '')).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+    out.sort(function (a, b) { return SORTS[sortKey](a, b) * sortDir; });
+    return out;
+  }
+  function renderBoard() {
+    var list = filteredRows();
+    var body = $('board-body');
+    body.innerHTML = list.map(function (r) {
+      var changeCell = r.change === null
+        ? '<span class="num">—</span>'
+        : '<span class="' + (r.change >= 0 ? 'up' : 'down') + '">' + pct(r.change) + '</span>';
+      return '<tr>' +
         '<td class="num">' + r.rank + '</td>' +
-        '<td><span class="name"><a href="#/protocol/' + esc(r.slug) + '">' + esc(r.name) + '</a></span>' +
-        '<span class="slug">' + esc(r.slug) + '</span>' + badge + '</td>' +
-        '<td class="num"><b>' + fmtCompact(r.implied_value_usd) + '</b></td>' +
-        '<td class="num">' + fmtCompact(r.tvl_usd) + '</td>' +
-        '<td class="num">' + fmtChange(r.change_7d) + '</td>' +
-        '<td class="num">' + age + '</td>' +
-        '<td>' + verdictBadge(r.verdict) + '</td>' +
-        '</tr>'
-      );
-    })
-    .join('');
-  document.getElementById('result-count').textContent =
-    'Showing ' + list.length + ' of ' + rows.length + ' protocols' +
-    (state.watchlistOnly ? ' — watchlist only' : '') + '.';
-  document.querySelectorAll('#board th[data-sort]').forEach((th) => {
-    th.removeAttribute('aria-sort');
-    if (th.getAttribute('data-sort') === state.sort) {
-      th.setAttribute('aria-sort', state.dir === 1 ? 'ascending' : 'descending');
+        '<td><a class="proto-name" href="#/protocol/' + esc(r.slug) + '">' + esc(r.name) + '</a>' +
+        '<div class="proto-sub">' + esc(r.category || 'Uncategorized') + ' · ' + esc(r.chains.join(', ')) + (r.watch ? ' · <span class="watchdot">★ watchlist</span>' : '') + '</div></td>' +
+        '<td class="num"><div class="implied">' + money(r.implied) + '</div>' +
+        '<div class="interval">' + money(r.lo) + ' – ' + money(r.hi) + ' · 50% interval</div></td>' +
+        '<td class="num">' + money(r.tvl) + '</td>' +
+        '<td class="num">' + changeCell + '</td>' +
+        '<td class="num">' + r.age + 'd' + (r.ageSource === 'median' ? ' *' : '') + '</td>' +
+        '<td>' + badge(r.verdict) + '<div class="reason">' + esc(r.reason) + '</div></td>' +
+        '</tr>';
+    }).join('');
+    $('rowcount').textContent = 'Showing ' + list.length + ' of ' + rows.length + ' rows';
+    document.querySelectorAll('thead th[data-sort]').forEach(function (th) {
+      th.classList.toggle('sorted', th.getAttribute('data-sort') === sortKey);
+    });
+  }
+  function fillFilters() {
+    var cats = [];
+    var chains = [];
+    rows.forEach(function (r) {
+      if (r.category && cats.indexOf(r.category) === -1) cats.push(r.category);
+      r.chains.forEach(function (c) { if (chains.indexOf(c) === -1) chains.push(c); });
+    });
+    cats.sort();
+    chains.sort();
+    cats.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      $('f-category').appendChild(o);
+    });
+    chains.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      $('f-chain').appendChild(o);
+    });
+  }
+
+  // ---- detail view ----
+  function renderDetail(slug) {
+    var r = null;
+    for (var i = 0; i < rows.length; i++) if (rows[i].slug === slug) { r = rows[i]; break; }
+    var el = $('detail');
+    if (!r) {
+      el.innerHTML = '<h2>Protocol not found</h2><p class="lede">No board row matches “' + esc(slug) + '”. It may be tokened, excluded, or outside the snapshot.</p>';
+      return;
     }
-  });
-}
-
-/* ---- the detail view ---- */
-
-function renderDetail(slug) {
-  const r = bySlug.get(slug);
-  const host = document.getElementById('detail');
-  if (!r) {
-    host.innerHTML = '<h2>Protocol not found</h2><p>No ranked protocol has the slug “' + esc(slug) + '”.</p>';
-    return;
+    var momWhy = r.change === null
+      ? 'No 7-day change reported, so the momentum factor is 1.0.'
+      : '7-day TVL change ' + pct(r.change) + ', clamped to [−60%, +120%].';
+    var matWhy = r.ageSource === 'median'
+      ? 'No listing date reported, so the board median age of ' + meta.medianAge + ' days is used.'
+      : 'Listed ' + esc(r.listed || '') + ', ' + r.age + ' days before the snapshot.';
+    el.innerHTML =
+      '<h2>' + esc(r.name) + '</h2>' +
+      '<p class="detail-sub">Rank ' + r.rank + ' · ' + esc(r.category || 'Uncategorized') + ' · ' + esc(r.chains.join(', ')) +
+      (r.watch ? ' · ★ on the watchlist' : '') + '</p>' +
+      '<h3>Model walk-through</h3>' +
+      '<table class="walk"><tbody>' +
+      '<tr><th>TVL</th><td>' + money(r.tvl) + '</td></tr>' +
+      '<tr><th>Comparable multiple</th><td>' + r.multiple.toFixed(3) + ' — ' + (r.multipleSource === 'category' ? 'median of ' + r.multipleN + ' tokened comparables in ' + esc(r.category || '') : 'global median of ' + r.multipleN + ' tokened protocols (fewer than 3 in this category)') + ', clamped to [0.05, 2.0].</td></tr>' +
+      '<tr><th>Momentum factor</th><td>' + r.momentum.toFixed(3) + ' — ' + momWhy + '</td></tr>' +
+      '<tr><th>Maturity factor</th><td>' + r.maturity.toFixed(3) + ' — ' + matWhy + '</td></tr>' +
+      '<tr><th>Implied value</th><td><strong>' + money(r.implied) + '</strong> = TVL × multiple × momentum × maturity, clamped to [$1M, $100T].</td></tr>' +
+      '<tr><th>50% interval</th><td><strong>' + money(r.lo) + ' – ' + money(r.hi) + '</strong> — the model\u2019s own uncertainty, ×' + meta.p25.toFixed(2) + ' to ×' + meta.p75.toFixed(2) + ' of the point estimate. On the 128 tokened protocols this interval covers the real market cap ' + (meta.coverageP25P75 * 100).toFixed(1) + '% of the time.</td></tr>' +
+      '<tr><th>Verdict</th><td>' + badge(r.verdict) + ' ' + esc(r.reason) + '</td></tr>' +
+      '</tbody></table>' +
+      '<h3>Farm plan</h3>' +
+      '<ol class="farm">' + r.farm.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
   }
-  const w = r.walkthrough;
-  const shownChains = r.chains.length > 4 ? r.chains.slice(0, 4).join(', ') + ' +' + (r.chains.length - 4) + ' more' : r.chains.join(', ');
-  const meta = [
-    '<span>TVL <b>' + fmtFull(r.tvl_usd) + '</b></span>',
-    '<span>Category <b>' + esc(r.category === null ? 'Not reported' : r.category) + '</b></span>',
-    '<span>Chains <b>' + esc(shownChains) + '</b></span>',
-    '<span>Listed <b>' + esc(r.listed_at === null ? 'Not reported' : r.listed_at) + '</b></span>',
-    '<span>7-day change <b>' + (r.change_7d === null ? 'Not reported' : (r.change_7d > 0 ? '+' : '') + r.change_7d.toFixed(2) + '%') + '</b></span>',
-    r.watchlist ? '<span><b>On the watchlist</b></span>' : '',
-  ].join('');
-  const verdictClass = r.verdict === 'Farm now' ? '' : r.verdict === 'Watch' ? ' watch' : ' skip';
-  host.innerHTML =
-    '<div class="detail-head">' +
-    '<h2>' + esc(r.name) + '</h2>' +
-    '<p class="detail-meta">' + meta + '</p>' +
-    '</div>' +
-    '<p><strong>Rank ' + r.rank + ' of ' + rows.length + '</strong> · implied value <strong>' + fmtFull(r.implied_value_usd) + '</strong> · ' + verdictBadge(r.verdict) + '</p>' +
-    '<p class="verdict-line' + verdictClass + '"><strong>' + esc(r.verdict) + '.</strong> ' + esc(r.verdict_reason) + '</p>' +
-    '<h3>How the value is built</h3>' +
-    '<ol class="walk">' +
-    '<li>' + esc(w.tvlLine) + '</li>' +
-    '<li>' + esc(w.multipleLine) + '</li>' +
-    '<li>' + esc(w.momentumLine) + '</li>' +
-    '<li>' + esc(w.maturityLine) + '</li>' +
-    '<li>' + esc(w.resultLine) + '</li>' +
-    '</ol>' +
-    (r.age_estimated ? '<p class="muted">* Age estimated: this protocol reports no listing date, so the median age of the ranked protocols (' + R.coverage.median_age_days + ' days) is used.</p>' : '') +
-    '<h3>Farm plan</h3>' +
-    '<ol class="farm">' +
-    r.farm_steps.map((s) => '<li>' + esc(s) + '</li>').join('') +
-    '</ol>';
-}
 
-/* ---- live tokens ---- */
-
-function renderLive() {
-  document.getElementById('live-body').innerHTML = R.live_tokens
-    .map((p, i) => {
-      return (
-        '<tr>' +
-        '<td class="num">' + (i + 1) + '</td>' +
-        '<td><span class="name">' + esc(p.name) + '</span><span class="slug">' + esc(p.slug) + '</span></td>' +
-        '<td class="num"><b>' + fmtCompact(p.mcap_usd) + '</b></td>' +
-        '<td class="num">' + fmtCompact(p.tvl_usd) + '</td>' +
-        '<td class="num">' + fmtChange(p.change_7d) + '</td>' +
-        '</tr>'
-      );
-    })
-    .join('');
-}
-
-/* ---- methodology ---- */
-
-function renderMethodology() {
-  document.getElementById('global-median').textContent = R.comparables.global_median.toFixed(3);
-  document.getElementById('global-n').textContent = String(R.comparables.global_n);
-  document.getElementById('comparables-body').innerHTML = R.comparables.table
-    .map((c) => {
-      return (
-        '<tr>' +
-        '<td>' + esc(c.category) + '</td>' +
-        '<td class="num">' + c.median.toFixed(3) + '</td>' +
-        '<td class="num">' + c.n + '</td>' +
-        '<td>' + (c.source === 'category' ? 'Category median' : 'Global median') + '</td>' +
-        '</tr>'
-      );
-    })
-    .join('');
-  const cov = R.coverage;
-  document.getElementById('coverage-note').textContent =
-    'The board ranks ' + cov.board_rows + ' protocols: all ' + cov.watchlist_total +
-    ' watchlist protocols, plus ' + cov.early_count + ' early candidates found beyond it. ' +
-    'Median age of the ranked protocols is ' + cov.median_age_days + ' days.';
-}
-
-/* ---- routing ---- */
-
-function show(viewId) {
-  document.querySelectorAll('.view').forEach((v) => {
-    v.hidden = v.id !== viewId;
-  });
-  window.scrollTo(0, 0);
-}
-
-function route() {
-  const hash = window.location.hash || '#/';
-  if (hash.indexOf('#/protocol/') === 0) {
-    renderDetail(decodeURIComponent(hash.slice('#/protocol/'.length)));
-    show('view-detail');
-  } else if (hash === '#/live') {
-    renderLive();
-    show('view-live');
-  } else if (hash === '#/methodology') {
-    renderMethodology();
-    show('view-methodology');
-  } else {
-    renderBoard();
-    show('view-board');
+  // ---- live tokens ----
+  function renderLive() {
+    $('live-body').innerHTML = D.live.map(function (t, i) {
+      return '<tr><td class="num">' + (i + 1) + '</td><td><span class="proto-name">' + esc(t.name) + '</span><div class="proto-sub">' + esc(t.slug) + '</div></td><td>' + esc(t.category || 'Uncategorized') + '</td><td class="num">' + money(t.mcap) + '</td><td class="num">' + money(t.tvl) + '</td></tr>';
+    }).join('');
   }
-}
 
-/* ---- setup ---- */
+  // ---- comparables table ----
+  function renderComparables() {
+    $('comparables-table').innerHTML = D.comparables.map(function (c) {
+      return '<tr><td>' + esc(c.category) + '</td><td class="num">' + c.median.toFixed(3) + '</td><td class="num">' + c.n + '</td></tr>';
+    }).join('');
+  }
 
-function fillSelect(id, values) {
-  const sel = document.getElementById(id);
-  values.forEach((v) => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    sel.appendChild(opt);
-  });
-}
+  // ---- router ----
+  var VIEWS = { board: 'view-board', detail: 'view-detail', live: 'view-live', method: 'view-method' };
+  function route() {
+    var hash = window.location.hash || '#/';
+    var view = 'board';
+    if (hash.indexOf('#/protocol/') === 0) {
+      view = 'detail';
+      renderDetail(decodeURIComponent(hash.slice('#/protocol/'.length)));
+    } else if (hash === '#/live') {
+      view = 'live';
+    } else if (hash === '#/methodology') {
+      view = 'method';
+    }
+    Object.keys(VIEWS).forEach(function (k) { $(VIEWS[k]).hidden = k !== view; });
+    document.querySelectorAll('.nav a').forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('data-nav') === (view === 'method' ? 'method' : view));
+    });
+    window.scrollTo(0, 0);
+  }
 
-function init() {
-  const cov = R.coverage;
-  document.getElementById('coverage').innerHTML =
-    '<strong>' + cov.watchlist_covered + '/' + cov.watchlist_total + '</strong> watchlist covered · ' +
-    '<strong>' + cov.early_count + '</strong> early candidates found beyond it · ' +
-    cov.board_rows + ' protocols ranked';
-
-  const categories = [...new Set(rows.map((r) => r.category).filter((c) => c !== null))].sort();
-  fillSelect('f-category', categories);
-  const chains = [...new Set(rows.flatMap((r) => r.chains))].sort();
-  fillSelect('f-chain', chains);
-
-  document.getElementById('q').addEventListener('input', (e) => {
-    state.q = e.target.value;
-    renderBoard();
+  // ---- wire up ----
+  fillFilters();
+  renderLedger();
+  renderComparables();
+  renderLive();
+  renderBoard();
+  ['f-search', 'f-category', 'f-chain', 'f-verdict', 'f-watchlist'].forEach(function (id) {
+    $(id).addEventListener('input', renderBoard);
+    $(id).addEventListener('change', renderBoard);
   });
-  document.getElementById('f-category').addEventListener('change', (e) => {
-    state.category = e.target.value;
-    renderBoard();
-  });
-  document.getElementById('f-chain').addEventListener('change', (e) => {
-    state.chain = e.target.value;
-    renderBoard();
-  });
-  document.getElementById('f-band').addEventListener('change', (e) => {
-    state.band = e.target.value;
-    renderBoard();
-  });
-  document.getElementById('f-watchlist').addEventListener('change', (e) => {
-    state.watchlistOnly = e.target.checked;
-    renderBoard();
-  });
-  document.querySelectorAll('#board th[data-sort]').forEach((th) => {
-    th.addEventListener('click', () => {
-      const key = th.getAttribute('data-sort');
-      if (state.sort === key) {
-        state.dir = -state.dir;
-      } else {
-        state.sort = key;
-        state.dir = key === 'name' || key === 'verdict' ? 1 : -1;
-      }
+  document.querySelectorAll('thead th[data-sort]').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var key = th.getAttribute('data-sort');
+      if (sortKey === key) { sortDir = -sortDir; }
+      else { sortKey = key; sortDir = key === 'name' || key === 'verdict' ? 1 : -1; }
       renderBoard();
     });
   });
-
   window.addEventListener('hashchange', route);
   route();
-}
-
-init();
+})();
