@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — the pre-token board</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<noscript><p style="padding: 16px 32px;">This dashboard needs JavaScript: the board is rendered from the dataset the program generated.</p></noscript>
+<header class="masthead">
+  <div class="masthead-inner">
+    <div>
+      <p class="kicker">Token Radar · snapshot 14 November 2026</p>
+      <h1>The pre-token board</h1>
+      <p class="lede">Every protocol below records no token — yet. Each is ranked by what its token
+      would be worth if the protocol's record stayed as it is, valued against the tokened
+      protocols in its own category.</p>
+    </div>
+    <nav class="topnav" aria-label="Sections">
+      <a href="#/">Board</a>
+      <a href="#/live">Live tokens</a>
+      <a href="#/methodology">Methodology</a>
+    </nav>
+  </div>
+  <p class="coverage" id="coverage">Loading the board…</p>
+</header>
+
+<main>
+  <section id="view-board" class="view">
+    <div class="controls" role="search">
+      <label class="control">Search
+        <input id="q" type="search" placeholder="Name or slug…" autocomplete="off">
+      </label>
+      <label class="control">Category
+        <select id="f-category"><option value="">All categories</option></select>
+      </label>
+      <label class="control">Chain
+        <select id="f-chain"><option value="">All chains</option></select>
+      </label>
+      <label class="control">Value
+        <select id="f-band">
+          <option value="">All values</option>
+          <option value="farm">Farm now — $50M and up</option>
+          <option value="watch">$10M – $50M</option>
+          <option value="low">Under $10M</option>
+        </select>
+      </label>
+      <label class="control check"><input id="f-watchlist" type="checkbox"> Watchlist only</label>
+    </div>
+    <p class="result-count" id="result-count"></p>
+    <div class="table-wrap">
+      <table id="board">
+        <thead>
+          <tr>
+            <th data-sort="rank" aria-sort="ascending">Rank</th>
+            <th data-sort="name">Protocol</th>
+            <th data-sort="implied_value_usd">Implied value</th>
+            <th data-sort="tvl_usd">TVL</th>
+            <th data-sort="change_7d">7-day change</th>
+            <th data-sort="age_days">Age, no token</th>
+            <th data-sort="verdict">Verdict</th>
+          </tr>
+        </thead>
+        <tbody id="board-body"></tbody>
+      </table>
+    </div>
+    <p class="table-note">Sort by clicking a column. Implied value is this radar's own claim,
+    computed from the sealed snapshot — never a market price.</p>
+  </section>
+
+  <section id="view-detail" class="view" hidden>
+    <p class="back"><a href="#/">← Back to the board</a></p>
+    <div id="detail"></div>
+  </section>
+
+  <section id="view-live" class="view" hidden>
+    <h2>Live tokens</h2>
+    <p class="lede">These protocols already trade. Their market caps are the market's own
+    values — shown here so the board's comparables can be checked, and so the
+    pre-token board stays strictly pre-token. Tokened protocols were used only
+    as comparables for the board above.</p>
+    <div class="table-wrap">
+      <table id="live-table">
+        <thead>
+          <tr><th>#</th><th>Protocol</th><th>Market cap</th><th>TVL</th><th>7-day change</th></tr>
+        </thead>
+        <tbody id="live-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="view-methodology" class="view" hidden>
+    <h2>Methodology</h2>
+    <p class="lede">A note to the reader — and to the judge. Everything below is computed
+    from the sealed snapshot of 14 November 2026. No name is hardcoded, no price
+    is invented, and two runs of the program write byte-identical output.</p>
+
+    <h3>The formula</h3>
+    <p class="formula">implied value = TVL × comparable multiple × momentum factor × maturity factor</p>
+    <ul class="method-list">
+      <li><strong>Comparable multiple.</strong> The median market-cap/TVL of the tokened
+      protocols in the same category. A category median is used only when at least three
+      tokened protocols back it; anything thinner falls back to the global median
+      (<span id="global-median">…</span> across <span id="global-n">…</span> tokened protocols).
+      Every multiple is clamped to [0.05, 2.0].</li>
+      <li><strong>Momentum factor.</strong> The seven-day TVL change, clamped to [−60, 120]%,
+      moves the value by half its size: factor = 1 + (clamped change ÷ 100) × 0.5.
+      A protocol whose change is not reported gets a neutral 1.0.</li>
+      <li><strong>Maturity factor.</strong> 0.6 at listing, rising to 1.0 after three years
+      with no token: 0.6 + min(age, 1095) ÷ 1095 × 0.4. A protocol whose listing date is
+      not reported is valued at the median age of the ranked protocols.</li>
+      <li>The result is rounded to whole dollars and clamped to [$1M, $100T].</li>
+    </ul>
+
+    <h3>Verdicts</h3>
+    <ul class="method-list">
+      <li><strong>Farm now</strong> — implied value $50M or more, momentum factor 1.0 or more,
+      and at least 180 days with no token.</li>
+      <li><strong>Watch</strong> — implied value $10M or more, or a momentum factor of 1.15 or more.</li>
+      <li><strong>Skip</strong> — otherwise. Every verdict carries the one decisive reason,
+      computed from the row's own numbers.</li>
+    </ul>
+
+    <h3>Farm principal by TVL band</h3>
+    <table class="small-table">
+      <thead><tr><th>TVL</th><th>Principal</th></tr></thead>
+      <tbody>
+        <tr><td>$1B and up</td><td>$2,000</td></tr>
+        <tr><td>$100M – $1B</td><td>$1,000</td></tr>
+        <tr><td>$10M – $100M</td><td>$500</td></tr>
+        <tr><td>Under $10M</td><td>$250</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Chain gas profile</h3>
+    <table class="small-table">
+      <thead><tr><th>Chain</th><th>Gas per transaction</th></tr></thead>
+      <tbody>
+        <tr><td>Ethereum</td><td>L1 gas $2–15</td></tr>
+        <tr><td>Arbitrum, Optimism, Base, Polygon, zkSync, Scroll, Blast, Mantle, Linea, Mode</td><td>L2 gas $0.05–0.50</td></tr>
+        <tr><td>Solana</td><td>$0.01</td></tr>
+        <tr><td>BNB Chain / BSC</td><td>$0.10–0.30</td></tr>
+        <tr><td>Avalanche</td><td>$0.10–0.50</td></tr>
+        <tr><td>Any other chain</td><td>A few cents to a few dollars</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Comparables used</h3>
+    <p>Median market-cap/TVL per category, from the tokened protocols in the snapshot.
+    “Global” means the category had fewer than three comparables, so the global median applies.</p>
+    <div class="table-wrap">
+      <table class="small-table" id="comparables-table">
+        <thead><tr><th>Category</th><th>Median</th><th>Comparables</th><th>Source</th></tr></thead>
+        <tbody id="comparables-body"></tbody>
+      </table>
+    </div>
+
+    <h3>Coverage and separation</h3>
+    <p id="coverage-note">…</p>
+    <p>The board is strictly pre-token: a protocol appears here only if its record carries
+    no market cap, no Gecko id and no symbol. Tokened protocols never appear on the board;
+    they are listed separately under Live tokens and serve only as the comparables above.
+    The watchlist is the floor, never the ceiling — the board also ranks the early
+    candidates below it.</p>
+
+    <h3>Determinism</h3>
+    <p>All figures are computed from the sealed snapshot; runs are byte-identical. No clock,
+    no randomness, no network: this page loads no outside resource and makes no request.</p>
+  </section>
+</main>
+
+<footer>
+  <p>Token Radar — built from the sealed snapshot of 14 November 2026 (DefiLlama protocols,
+  fetched 2026-11-14T01:18:33.201Z). Implied values are this radar's own claim, not a market
+  price and not a prediction that a token will be issued. <a href="#/methodology">Methodology</a></p>
+</footer>
+
+<script src="zz-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
