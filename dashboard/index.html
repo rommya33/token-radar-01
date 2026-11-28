@@ -3,35 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pre-Token Radar — every protocol without a token, priced</title>
+<title>Pre-Token Radar</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <header class="masthead">
-  <div class="masthead-inner">
-    <div>
-      <h1>Pre-Token Radar</h1>
-      <p class="tagline">Every protocol without a token, priced against the ones that already trade.</p>
-    </div>
-    <div class="masthead-meta">
-      <p>Snapshot <strong id="meta-asof">14 Nov 2026</strong></p>
-      <p><strong id="meta-coverage">40/40 watchlist covered</strong> · <span id="meta-early"></span></p>
-    </div>
+  <div>
+    <h1>Pre-Token Radar</h1>
+    <p class="tagline">Every protocol without a token, priced against the ones that already trade.</p>
   </div>
-  <nav class="tabs">
-    <a href="#/" data-tab="board">Board</a>
-    <a href="#/live" data-tab="live">Live tokens</a>
-    <a href="#/methodology" data-tab="methodology">Methodology</a>
-  </nav>
+  <div class="masthead-right">
+    <p>Snapshot <strong id="as-of">2026-11-14</strong></p>
+    <p><strong id="coverage">40/40 watchlist covered</strong> &middot; <span id="early-count"></span></p>
+  </div>
 </header>
-
+<nav class="tabs">
+  <a href="#/board" id="tab-board" class="tab">Board</a>
+  <a href="#/live" id="tab-live" class="tab">Live tokens</a>
+  <a href="#/methodology" id="tab-methodology" class="tab">Methodology</a>
+</nav>
 <main>
   <section id="view-board" class="view">
-    <div id="top10" class="top10" aria-label="Top 10 protocols by implied value"></div>
-    <p id="model-strip" class="model-strip"></p>
-    <div id="ledger-bar" class="ledger-bar" aria-label="All protocols in the snapshot, accounted for"></div>
+    <div id="top10" class="top10"></div>
+    <div id="model-strip" class="model-strip"></div>
+    <div id="ledger-strip" class="ledger-strip"></div>
     <div class="filters">
-      <input id="f-search" type="search" placeholder="Search name, slug or category…" aria-label="Search">
+      <input id="f-search" type="search" placeholder="Search name, slug or category&hellip;" aria-label="Search">
       <select id="f-category" aria-label="Category"><option value="">All categories</option></select>
       <select id="f-chain" aria-label="Chain"><option value="">All chains</option></select>
       <select id="f-verdict" aria-label="Verdict">
@@ -41,59 +38,52 @@
         <option>Skip</option>
       </select>
       <label class="check"><input id="f-watchlist" type="checkbox"> Watchlist only</label>
-      <span id="f-count" class="count"></span>
+      <span id="showing" class="showing"></span>
     </div>
     <table class="board">
       <thead>
         <tr>
-          <th data-sort="rank" class="num">#</th>
+          <th data-sort="rank">#</th>
           <th data-sort="name">Protocol</th>
-          <th data-sort="implied_value_usd" class="num sorted">Implied value</th>
-          <th data-sort="tvl_usd" class="num">TVL</th>
-          <th data-sort="change_7d" class="num">7-day</th>
-          <th data-sort="age_days" class="num">Age</th>
+          <th data-sort="implied" class="num">Implied value</th>
+          <th data-sort="tvl" class="num">TVL</th>
+          <th data-sort="chg" class="num">7-day</th>
+          <th data-sort="age" class="num">Age</th>
           <th data-sort="verdict">Verdict</th>
         </tr>
       </thead>
       <tbody id="board-body"></tbody>
     </table>
-    <p class="note">Implied value is this radar's own claim, computed from the sealed snapshot — never a price the market sets. A protocol records no token; the record is not proof it has none.</p>
+    <p class="foot-note">Values are implied market caps from the fitted model, not prices and not
+    predictions of any listing. The 50% interval on each row comes from the
+    leave-one-out residuals of the 128 tokened comparables.</p>
   </section>
 
   <section id="view-detail" class="view" hidden>
-    <p class="crumbs"><a href="#/">Board</a> · <span id="detail-crumb"></span></p>
+    <p><a href="#/board" class="back">&larr; Back to the board</a></p>
     <div id="detail"></div>
   </section>
 
   <section id="view-live" class="view" hidden>
-    <h2>Live tokens — the market's own values</h2>
-    <p>These protocols already trade. They are the comparables the board is priced against, never launch candidates themselves. Values below are the market's, not this radar's.</p>
+    <h2>Live tokens</h2>
+    <p>The market&rsquo;s own values, for the 24 largest tokened protocols in the
+    snapshot. Tokened protocols were used only as comparables to fit the model;
+    the board itself is strictly pre-token.</p>
     <table class="board">
-      <thead>
-        <tr>
-          <th class="num">#</th>
-          <th>Protocol</th>
-          <th class="num">Market cap</th>
-          <th class="num">TVL</th>
-          <th class="num">Mcap / TVL</th>
-          <th class="num">7-day</th>
-        </tr>
-      </thead>
+      <thead><tr><th>#</th><th>Protocol</th><th class="num">Market cap</th><th class="num">TVL</th><th>Category</th><th class="num">mcap / TVL</th></tr></thead>
       <tbody id="live-body"></tbody>
     </table>
   </section>
 
   <section id="view-methodology" class="view" hidden>
-    <h2>Methodology — how every number is made</h2>
+    <h2>Methodology</h2>
     <div id="methodology"></div>
   </section>
 </main>
-
 <footer>
-  <p>Pre-Token Radar — built from the sealed snapshot of 14 Nov 2026. All figures computed, none set by hand.</p>
-  <p><a href="#/methodology">Methodology</a> · <a href="#/live">Live tokens</a> · <a href="#/">Board</a></p>
+  <p>All figures computed from the sealed snapshot; runs are byte-identical.
+  Pre-token protocols only on the board. No network calls are made by this page.</p>
 </footer>
-
 <script src="zz-data.js"></script>
 <script src="app.js"></script>
 </body>
