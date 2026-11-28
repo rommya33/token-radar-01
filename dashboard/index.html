@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pre-Token Radar — the best token launch radar</title>
+<title>Pre-Token Radar — every protocol without a token, priced</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -14,29 +14,23 @@
       <p class="tagline">Every protocol without a token, priced against the ones that already trade.</p>
     </div>
     <div class="masthead-meta">
-      <div>Snapshot <strong>14 Nov 2026</strong></div>
-      <div><strong id="coverage-line">40/40 watchlist covered · 158 early candidates found beyond it</strong></div>
+      <p>Snapshot <strong id="meta-asof">14 Nov 2026</strong></p>
+      <p><strong id="meta-coverage">40/40 watchlist covered</strong> · <span id="meta-early"></span></p>
     </div>
   </div>
-  <nav class="nav">
-    <a href="#/" data-nav="board">Board</a>
-    <a href="#/live" data-nav="live">Live tokens</a>
-    <a href="#/methodology" data-nav="method">Methodology</a>
+  <nav class="tabs">
+    <a href="#/" data-tab="board">Board</a>
+    <a href="#/live" data-tab="live">Live tokens</a>
+    <a href="#/methodology" data-tab="methodology">Methodology</a>
   </nav>
 </header>
 
 <main>
   <section id="view-board" class="view">
-    <div class="integrity" id="integrity-strip">
-      <div class="integrity-head">
-        <strong>All 758 protocols in the snapshot are accounted for.</strong>
-        <span>198 on the board · 128 tokened comparables · 432 set aside with a reason each — see the ledger in Methodology.</span>
-      </div>
-      <div class="ledger-bar" id="ledger-bar" aria-label="Ledger of all 758 protocols"></div>
-      <div class="ledger-legend" id="ledger-legend"></div>
-    </div>
-
-    <div class="controls">
+    <div id="top10" class="top10" aria-label="Top 10 protocols by implied value"></div>
+    <p id="model-strip" class="model-strip"></p>
+    <div id="ledger-bar" class="ledger-bar" aria-label="All protocols in the snapshot, accounted for"></div>
+    <div class="filters">
       <input id="f-search" type="search" placeholder="Search name, slug or category…" aria-label="Search">
       <select id="f-category" aria-label="Category"><option value="">All categories</option></select>
       <select id="f-chain" aria-label="Chain"><option value="">All chains</option></select>
@@ -47,126 +41,51 @@
         <option>Skip</option>
       </select>
       <label class="check"><input id="f-watchlist" type="checkbox"> Watchlist only</label>
-      <span class="rowcount" id="rowcount"></span>
+      <span id="f-count" class="count"></span>
     </div>
-
-    <div class="table-wrap">
-      <table class="board">
-        <thead>
-          <tr>
-            <th data-sort="rank" class="num">#</th>
-            <th data-sort="name">Protocol</th>
-            <th data-sort="implied" class="num">Implied value</th>
-            <th data-sort="tvl" class="num">TVL</th>
-            <th data-sort="change" class="num">7-day</th>
-            <th data-sort="age" class="num">Age</th>
-            <th data-sort="verdict">Verdict</th>
-          </tr>
-        </thead>
-        <tbody id="board-body"></tbody>
-      </table>
-    </div>
-    <p class="footnote">Implied value is the model's point estimate. The line under it is the model's own 50% interval — the range the same protocol's value would fall in half the time, learned from the model's own errors on protocols that already trade. Click a protocol for the full walk-through and farm plan.</p>
+    <table class="board">
+      <thead>
+        <tr>
+          <th data-sort="rank" class="num">#</th>
+          <th data-sort="name">Protocol</th>
+          <th data-sort="implied_value_usd" class="num sorted">Implied value</th>
+          <th data-sort="tvl_usd" class="num">TVL</th>
+          <th data-sort="change_7d" class="num">7-day</th>
+          <th data-sort="age_days" class="num">Age</th>
+          <th data-sort="verdict">Verdict</th>
+        </tr>
+      </thead>
+      <tbody id="board-body"></tbody>
+    </table>
+    <p class="note">Implied value is this radar's own claim, computed from the sealed snapshot — never a price the market sets. A protocol records no token; the record is not proof it has none.</p>
   </section>
 
   <section id="view-detail" class="view" hidden>
-    <p><a href="#/" class="back">← Back to the board</a></p>
+    <p class="crumbs"><a href="#/">Board</a> · <span id="detail-crumb"></span></p>
     <div id="detail"></div>
   </section>
 
   <section id="view-live" class="view" hidden>
-    <h2>Live tokens</h2>
-    <p class="lede">These protocols already trade. Their market values are the market's own — they are shown here only so the board's comparables can be checked, and so the separation is visible: the board holds pre-token protocols only.</p>
-    <div class="table-wrap">
-      <table class="board">
-        <thead><tr><th class="num">#</th><th>Protocol</th><th>Category</th><th class="num">Market cap</th><th class="num">TVL</th></tr></thead>
-        <tbody id="live-body"></tbody>
-      </table>
-    </div>
+    <h2>Live tokens — the market's own values</h2>
+    <p>These protocols already trade. They are the comparables the board is priced against, never launch candidates themselves. Values below are the market's, not this radar's.</p>
+    <table class="board">
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>Protocol</th>
+          <th class="num">Market cap</th>
+          <th class="num">TVL</th>
+          <th class="num">Mcap / TVL</th>
+          <th class="num">7-day</th>
+        </tr>
+      </thead>
+      <tbody id="live-body"></tbody>
+    </table>
   </section>
 
-  <section id="view-method" class="view" hidden>
-    <h2>Methodology</h2>
-    <p class="lede">The board is a ranking by implied value. Nothing on it is a guess about a
-    launch date, and nothing is bought or sold. Every number below is computed from the sealed
-    snapshot of 14 Nov 2026 — no outside data, no hand-set prices.</p>
-
-    <h3>The formula</h3>
-    <p class="formula">implied value = TVL × comparable multiple × momentum factor × maturity factor</p>
-    <ul>
-      <li><strong>Comparable multiple.</strong> For a protocol's category, the median market-cap-to-TVL ratio of tokened protocols in the same category (at least 3 comparables, or the global median of all 128 tokened protocols with a positive market cap). The multiple is clamped to [0.05, 2.0].</li>
-      <li><strong>Momentum factor.</strong> From the 7-day TVL change, clamped to [−60%, +120%]: 1 + (change ÷ 100) × 0.5. No change reported means a factor of 1.0.</li>
-      <li><strong>Maturity factor.</strong> From the days since listing: 0.6 + min(age, 1095) ÷ 1095 × 0.4. No listing date reported means the board's median age, 418 days.</li>
-      <li><strong>Clamp.</strong> The result is clamped to [$1M, $100T].</li>
-    </ul>
-
-    <h3>The interval — what the model does not know</h3>
-    <p>Every implied value on the board carries a 50% interval under it, <span class="mono" id="m-interval">×0.28 – ×5.57</span> of the point estimate.
-    It is not borrowed from anywhere: it is the model's own error, measured by leaving each of the 128
-    tokened protocols out in turn, repricing it without itself, and recording how far the real market
-    cap landed from the repriced value. The middle half of those errors is the interval.
-    On the 128 protocols, the interval covers the real market cap <strong>50.0%</strong> of the time.
-    The wider 80% interval is ×0.083 – ×14.9 and covers <strong>79.7%</strong>.</p>
-    <p>Two honest consequences. First, comparables order the board — they are what makes the ranking
-    stable — but the interval admits how wide a single protocol's value can be: a point estimate is a
-    ranking tool, not a price. Second, the model is median-unbiased (the median error is ×1.03) and
-    protocol-noisy (only about one in five real market caps lands within 2× of the estimate), because
-    market-cap-to-TVL ratios vary enormously even inside one category. The interval says so on every row.</p>
-
-    <h3>The ledger — all 758 protocols accounted for</h3>
-    <p>The snapshot holds 758 protocols. 198 are on the board. The rest are not missing: each one is
-    counted below, with the reason it is not ranked. The ledger closes exactly — 758 in, 758 out.</p>
-    <div class="table-wrap">
-      <table class="ledger">
-        <thead><tr><th>Group</th><th class="num">Count</th><th>Why</th></tr></thead>
-        <tbody id="ledger-table"></tbody>
-        <tfoot><tr><th>Total</th><th class="num" id="ledger-total">758</th><th>Every protocol in the snapshot.</th></tr></tfoot>
-      </table>
-    </div>
-    <p>One group deserves a line of its own: <strong>272 of the 614 records with no market cap are not
-    pre-token at all.</strong> They carry a token symbol or a listing id, which means they are
-    sub-protocols and product lines of parents that already trade — a lending market of a tokened
-    protocol, a DEX of a tokened exchange. The strict test for the board is all three of market cap,
-    symbol and listing id null, and the board's 198 rows pass it: not one of them carries a symbol or
-    a listing id.</p>
-
-    <h3>Comparables</h3>
-    <p>Category medians of market-cap-to-TVL over tokened protocols with a positive market cap.
-    A category with fewer than 3 comparables falls back to the global median.</p>
-    <div class="table-wrap">
-      <table class="ledger">
-        <thead><tr><th>Category</th><th class="num">Median multiple</th><th class="num">Comparables</th></tr></thead>
-        <tbody id="comparables-table"></tbody>
-      </table>
-    </div>
-
-    <h3>Verdicts and farm plans</h3>
-    <p><strong>Farm now</strong> means implied value at least $50M, momentum at least 1.0 and at least
-    180 days with no token. <strong>Watch</strong> means implied value at least $10M, or momentum at
-    least 1.15. Everything else is <strong>Skip</strong>. Each row carries one decisive reason computed
-    from its own numbers.</p>
-    <p>Every row has a six-step farm plan. The principal follows the TVL band:</p>
-    <div class="table-wrap">
-      <table class="ledger">
-        <thead><tr><th>TVL band</th><th class="num">Principal</th></tr></thead>
-        <tbody>
-          <tr><td>≥ $1B</td><td class="num">$2,000</td></tr>
-          <tr><td>≥ $100M</td><td class="num">$1,000</td></tr>
-          <tr><td>≥ $10M</td><td class="num">$500</td></tr>
-          <tr><td>below $10M</td><td class="num">$250</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>Gas follows the first chain: Ethereum $2–15, the big L2s $0.05–0.50, Solana $0.01, Avalanche
-    $0.10–0.50, anything else a few cents to a few dollars. Steps name a concrete action, a dollar
-    figure and a time; the last step is always the same — claim only from the protocol's own published
-    links, never pay anyone to claim for you.</p>
-
-    <h3>Coverage and determinism</h3>
-    <p><strong>40/40 watchlist covered · 158 early candidates found beyond it.</strong>
-    All figures are computed from the sealed snapshot (as of 14 Nov 2026); two runs of the program
-    write byte-identical output. The board is strictly pre-token; tokened protocols appear only as
-    comparables and in the live-tokens view.</p>
+  <section id="view-methodology" class="view" hidden>
+    <h2>Methodology — how every number is made</h2>
+    <div id="methodology"></div>
   </section>
 </main>
 
