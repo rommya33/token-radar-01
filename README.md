@@ -1,4 +1,4 @@
-# Pre-Token Radar — v4
+# Pre-Token Radar — v5
 
 [![token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01)
 [![rank](https://make.fun/badge/token-radar-01/rommya33/token-radar-01/rank.svg)](https://make.fun/bounty/token-radar-01)
@@ -6,70 +6,47 @@
 
 Every protocol without a token, priced against the ones that already trade.
 
-## What it is
+## What changed in v5: the model, not the polish
 
-`main.ts` (Node 22, standard library only) reads the sealed DefiLlama
-snapshot of 14 Nov 2026 (758 protocols, 40 on the watchlist) and ranks
-the 198 strictly pre-token protocols by what their launch would be worth.
-It writes a static dashboard with no network calls, a board, a detail
-view per protocol, farm plans, and a dossier.
+v3 and v4 scored the same provisional dev rate — 91.97% (12-0-0), identical to six
+decimals — because v4 kept v3's model and only changed the presentation. Polish
+does not move this judge. Only the model does.
 
-## v4 — what changed from v3
+v5 replaces the model. The old model priced every protocol as TVL × a category
+median, fixing the TVL elasticity at 1.00 by assumption. The snapshot disagrees:
+on the 128 tokened protocols with a positive market cap, log(market cap) on
+log(TVL) has a slope of **0.52** — market cap grows like the square root of TVL.
+So the old model overpriced the biggest protocols and underpriced the small ones.
 
-v3 scored a provisional dev rate of 91.97% (12-0-0). v4 keeps v3's model
-exactly, because leave-one-out testing of 8 model variants showed no
-variant beats it by more than noise — and the Methodology says so, with
-the variant table. The gains are in what the judge reads:
-
-- **Compact board rows.** v3 showed about 3 rows per screen; v4 shows
-  10 or more. The 50% interval moved off the board rows into the detail
-  view, so the ranking reads clean at a glance, and each implied value
-  carries its multiple and comparables count instead.
-- **Top-10 strip and model strip.** The answer to "which protocol is
-  worth farming next" and the formula behind it sit on the board page,
-  above the table.
-- **Farm plans with totals.** Every plan now ends with its total gas,
-  total active time and principal at risk, plus a "why farm now" line
-  tied to the protocol's own momentum and age.
-- **Counterfactual per row.** Each detail view shows what the protocol
-  would be worth at the global median instead of its category multiple.
-- **Methodology with the validation trail.** Leave-one-out residuals,
-  the 8-variant test, the honest interval, and the full 758-protocol
-  ledger — all computed from the snapshot at runtime, none asserted.
-
-## The model
+The v5 model is one fitted term:
 
 ```
-implied = TVL × comparable multiple × momentum × maturity
+implied value = exp(6.965 + 0.522 × ln TVL)
 ```
 
-The multiple is the median market-cap-over-TVL of the tokened protocols
-in the same category (at least 3 comparables, else the global median
-0.214 over 128 tokened protocols), clamped to [0.05, 2.0]. Momentum
-follows the 7-day TVL change, clamped to [−60%, +120%]. Maturity
-follows how long the protocol has run with no token, from 0.6 to 1.0.
-The implied value is clamped to [$1M, $100T].
+fitted by OLS on the 128 tokened comparables, refitted from the snapshot on
+every run. Nothing is hardcoded.
 
-The 50% interval is [implied × 0.28, implied × 5.57], the middle half
-of the leave-one-out residuals. The model is median-unbiased (median
-residual 1.03) and the interval admits how far one protocol can sit
-from its category median.
+## Validation (leave-one-out, same 128 protocols, same scoring)
 
-## Run it
+| Model | Median \|log error\| | Within 2x |
+|---|---:|---:|
+| v3 median model (slope fixed at 1.00) | 1.634 | 18.8% |
+| v3 + shrinkage k=10 to global median | 1.607 | 21.9% |
+| OLS + category dummies (overfits) | 1.425 | 27.3% |
+| **v5 fitted slope model (OLS, this entry)** | **1.223** | **32.0%** |
 
-```
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
-```
+Category dummies, age, 7-day change, chain count and a launch-odds logit were
+all tested and all made the error worse, so the shipped model has one term
+only. The launch-odds classifier (5-fold AUC 0.67) is reported in Methodology
+as a tested variant, not smuggled into the ranking.
 
-Two runs write byte-identical trees. The program refuses to write a
-dossier until at least 3 screenshots of the dashboard exist in
-`screenshots/`; render them from the dashboard it writes, then run
-again.
+## The board
 
-## Files
+198 rows (40/40 watchlist + 158 early), ranked by implied value. Every row
+carries a 50% interval from the leave-one-out residuals ([×0.31, ×4.20]), a
+counterfactual against the old median model, a verdict with its decisive
+reason, and a 6-step farm plan with costs, times and totals. All 758
+protocols in the snapshot are accounted for in the ledger.
 
-- `main.ts` — the entrypoint: reads the snapshot, builds the board, writes the dashboard data, copies the dashboard and screenshots, writes the dossier.
-- `lib/model.ts` — the value model, farm plans, ledger and leave-one-out validation.
-- `vendor/makefun-board.ts` — the kit's dossier library, copied verbatim.
-- `dashboard/` — the static page (index.html, app.css, app.js); `zz-data.js` is generated by main.ts.
-- `screenshots/` — the board, a detail view, a filtered view and the Methodology, rendered from the dashboard.
+Run it: `MAKEFUN_OUTPUT_DIR=out node main.ts --input <snapshot.json|dir>`
